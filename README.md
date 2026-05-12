@@ -69,7 +69,7 @@ This project is part of a personal security automation learning path. It demonst
 ----------------------------------------------------------------------------------------------------
 
 ## 🧑‍💻 Author
-Danny — Security Automation Student & Cybersecurity Enthusiast  
+Danny — Security Automation Engineer & Cybersecurity Enthusiast  
 Costa Rica
 
 
