@@ -6,10 +6,9 @@ This Python script queries the VirusTotal API to retrieve reputation information
 ## 🔍 Features
 - Uses the official VirusTotal v3 API
 - Retrieves reputation statistics for any IPv4 or IPv6 address
-- Clean and readable Python code
-- Fully commented in English
-- Beginner‑friendly structure
-- Ideal for security automation portfolios and GitHub projects
+
+
+  
 
 ---
 
@@ -64,11 +63,10 @@ This project is part of a personal security automation learning path. It demonst
 - How to consume security APIs
 - How to parse JSON responses
 - How to structure Python scripts for automation
-- How to build a professional GitHub portfolio
 
-More scripts will be added over time (Shodan, AbuseIPDB, log parsing, automation tools, etc.).
 
----
+
+----------------------------------------------------------------------------------------------------
 
 ## 🧑‍💻 Author
 Danny — Security Automation Student & Cybersecurity Enthusiast  
