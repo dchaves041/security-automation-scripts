@@ -11,6 +11,7 @@ vt_ip_checker_v2.py — IP + Domain analysis (includes WHOIS, ASN, country, repu
 ---
 
 ## 🔍 Features
+<<<<<<< HEAD
 - IP reputation lookup
 
 Domain reputation lookup
@@ -24,6 +25,13 @@ VirusTotal last analysis statistics
 Safe JSON parsing
 
 Modular and versioned structure
+=======
+- Uses the official VirusTotal v3 API
+- Retrieves reputation statistics for any IPv4 or IPv6 address
+
+
+  
+>>>>>>> 1e13bc0d1eba2f25b942787564ca9ec37f8cd901
 
 ---
 
@@ -83,11 +91,16 @@ security-automation-scripts/
 This project is part of a personal security automation learning path. It demonstrates:
 - How to consume security APIs
 - How to parse JSON responses
+<<<<<<< HEAD
 - How to structure Python scr
 
+=======
+- How to structure Python scripts for automation
+>>>>>>> 1e13bc0d1eba2f25b942787564ca9ec37f8cd901
 
 
----
+
+----------------------------------------------------------------------------------------------------
 
 ## 🧑‍💻 Author
 Danny — Security Automation Engineer & Cybersecurity Enthusiast  
