@@ -46,10 +46,10 @@ def check_ip_reputation(ip_address, api_key):
 # ---------------------------------------------
 if __name__ == "__main__":
     # Replace with your own VirusTotal API key
-    API_KEY = "YOUR_API_KEY_HERE"
+    API_KEY = "9929bcd30ee8d88e0625abcc113393eb91a194c51caec335bebc6184197040ab"
 
     # IP address to analyze
-    ip_to_check = "8.8.8.8"
+    ip_to_check = "45.155.205.233"
 
     # Call the function
     result = check_ip_reputation(ip_to_check, API_KEY)
