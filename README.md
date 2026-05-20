@@ -1,183 +1,192 @@
-# Security Automation Scripts (Python)
+# Security Log Analyzer & Threat Intelligence SOAR (Technical Edition)
 
-This repository contains multiple Python tools focused on security automation, threat intelligence, and log analysis.  
-Each module is designed to analyze Indicators of Compromise (IOCs), detect attack patterns, and enrich data using external APIs.
+A modular security analysis framework combining log parsing, multi‑source threat intelligence enrichment, automated severity scoring, and a standalone AWS Security Hub auditor. Designed as a lightweight, extensible security pipeline suitable for SOC workflows, cloud security assessments, and threat‑driven investigations.
 
-The project is part of a personal learning path toward becoming a Security Automation Engineer.
+--------------------------------------------------------------------------------
 
----
+## 1. Overview
 
-# 📂 Modules Included
+This project provides two independent but complementary components:
 
-## 1️⃣ Threat Intelligence Automation (VirusTotal)
+1. log_parser_soar.py  
+   Local log analysis engine with integrated threat intelligence (TI) enrichment and a unified severity scoring model.
 
-Python scripts for analyzing IPs and domains using the VirusTotal API.
+2. aws_securityhub_auditor.py  
+   Standalone cloud security auditor that retrieves, normalizes, and exports AWS Security Hub findings.
 
-### vt_ip_checker.py
-Basic IP reputation checker using VirusTotal v3 API.
+Both components are designed for modularity, reproducibility, and integration into larger security automation pipelines.
 
-### vt_ip_checker_v2.py
-Extended version with:
-- IP reputation  
-- Domain reputation  
-- WHOIS extraction  
-- ASN and country information  
-- Last analysis statistics  
-- Safe JSON parsing  
-- Modular structure  
+--------------------------------------------------------------------------------
 
----
+## 2. Architecture
 
-## 2️⃣ Log Parser (Attack Detection)
+### 2.1 High‑Level Architecture
 
-A Python-based log analyzer capable of detecting multiple types of attacks in Apache/Nginx access logs.
+Web Server Logs  
+        ↓  
+Log Parser (SIEM)  
+        ↓  
+Threat Intelligence Layer (VT, AbuseIPDB, Shodan, OTX, GreyNoise)  
+        ↓  
+Unified Severity Engine  
+        ↓  
+SOC‑Style CSV Export
 
-### Extractors:
-- IP extraction  
-- URL extraction  
-- HTTP status extraction  
-- Date extraction  
+### 2.2 Cloud Auditor Architecture
 
-### Attack Detectors:
-- SQL Injection  
-- XSS  
-- Brute Force  
-- Path Scanning  
-- Bots/Scrapers  
-- Command Injection  
+AWS Security Hub → boto3 client → paginator → normalization → CSV export
 
-### Interactive Menu:
-1. Detect SQL Injection  
-2. Detect XSS  
-3. Detect Brute Force  
-4. Detect Path Scanning  
-5. Detect Bots/Scrapers  
-6. Detect Command Injection  
-7. Run ALL detections  
-0. Exit  
+--------------------------------------------------------------------------------
 
-### CSV Export:
-Detected attacks can be exported to `attacks.csv`.
+## 3. Components
 
----
+### 3.1 Log Parser (Mini‑SIEM)
 
-# 🔍 Features Summary
+Capabilities:
+- Pattern‑based detection of:
+  - SQL Injection
+  - XSS
+  - Path Traversal
+  - Command Injection
+  - Brute Force
+  - Bot/Scraper activity
+- Extraction of:
+  - IP addresses
+  - Timestamps
+  - HTTP methods
+  - URLs
+  - Status codes
 
-## Threat Intelligence
-- IP reputation lookup  
-- Domain reputation lookup  
-- WHOIS extraction  
-- ASN and country info  
-- VirusTotal last analysis stats  
+### 3.2 Threat Intelligence Layer (Mini‑SOAR)
 
-## Log Analysis & Attack Detection
-- Regex-based IOC extraction  
-- Multiple attack signatures  
-- Modular detection functions  
-- Interactive console menu  
-- CSV export  
+Each detected IP is enriched using:
 
----
+VirusTotal → malicious/suspicious counts  
+AbuseIPDB → abuse score, total reports  
+Shodan → open ports, services, CVEs, ISP, OS  
+OTX → pulses, tags, malware families  
+GreyNoise → classification (malicious, benign, noise, unknown), actor  
 
-# 📦 Requirements
+All TI sources return normalized dictionaries for deterministic processing.
 
-pip install requests
+--------------------------------------------------------------------------------
 
----
+## 4. Unified Severity Engine
 
-# 🔑 VirusTotal API Setup
+Severity is computed using a multi‑factor model:
 
-1. Create an account at https://www.virustotal.com  
-2. Go to your profile  
-3. Copy your API key  
-4. Replace the placeholder:
+- VirusTotal malicious count  
+- AbuseIPDB confidence score  
+- Shodan vulnerability count  
+- OTX pulse count and threat tags  
+- GreyNoise classification and noise flag  
 
-API_KEY = "YOUR_API_KEY_HERE"
+Severity levels:
+- Low  
+- Medium  
+- High  
+- Critical  
 
----
+The engine is deterministic and rule‑based for auditability.
 
-# ▶️ Usage
+--------------------------------------------------------------------------------
 
-## VirusTotal Scripts:
-python vt_ip_checker.py  
-python vt_ip_checker_v2.py  
+## 5. AWS Security Hub Auditor (Standalone Script)
 
-Choose:  
-1 - Analyze IP  
-2 - Analyze Domain  
+aws_securityhub_auditor.py performs:
 
-## Log Parser:
-python log_parser.py  
+- boto3 client initialization  
+- Paginated retrieval of Security Hub findings  
+- Normalization of fields:
+  - Severity
+  - Resource type
+  - Resource ID
+  - Compliance status
+  - Workflow status
+- CSV export with timestamped filenames  
 
-Enter the log file path and choose an option from the menu.
+This script is fully independent from the SOAR pipeline.
 
----
+--------------------------------------------------------------------------------
 
-# 🧪 Example Outputs
+## 6. Project Structure
 
-### IP Analysis:
-{
- 'ip': '8.8.8.8',
- 'country': 'US',
- 'asn': 15169,
- 'malicious': 0,
- 'suspicious': 0,
- 'undetected': 35,
- 'harmless': 57
-}
-
-### Log Parser Detection:
-Detected 3 SQL Injection attempts:  
-185.220.101.1 - GET /?id=1 OR 1=1
-
----
-
-# 📁 Project Structure
-
-security-automation-scripts/  
+project/  
 │  
-├── vt_ip_checker.py  
-├── vt_ip_checker_v2.py  
-├── log_parser.py  
-├── requirements.txt  
-├── .gitignore  
+├── log_parser_soar.py          # Local SIEM + SOAR + TI enrichment  
+├── aws_securityhub_auditor.py  # Standalone AWS Security Hub auditor  
 └── README.md  
 
----
+--------------------------------------------------------------------------------
 
-# 🎯 Learning Purpose
+## 7. Requirements
 
-This project demonstrates:  
-- How to consume security APIs  
-- How to enrich IOCs with threat intelligence  
-- How to parse logs and detect attacks  
-- How to structure modular automation scripts  
-- How to build tools that grow in complexity over time  
+- Python 3.10+  
+- Dependencies:
+  - requests  
+  - boto3  
+- API Keys:
+  - VirusTotal  
+  - AbuseIPDB  
+  - Shodan  
+  - OTX  
+  - GreyNoise  
+- AWS credentials configured in:
+  - ~/.aws/credentials  
+  - or environment variables  
 
----
+--------------------------------------------------------------------------------
 
-# 🟧 Roadmap (Next Steps)
+## 8. Usage
 
-## Phase 3 — Threat Intelligence Integration for Log Parser
-- VirusTotal enrichment for suspicious IPs  
-- AbuseIPDB scoring  
-- Shodan port/service enumeration  
-- OTX (AlienVault) IOC correlation  
-- GreyNoise noise classification  
+### 8.1 Run the Log Parser / SOAR
 
-## Phase 4 — Automation & Reporting
-- JSON export  
-- HTML report generation  
-- Dashboard integration  
-- Scheduled scans  
+python3 log_parser_soar.py access.log
 
----
+Outputs:
+- Detected attack events  
+- TI‑enriched metadata  
+- Unified severity score  
+- CSV export  
 
-# 👤 Author
+### 8.2 Run the AWS Security Hub Auditor
 
-Danny  
-Security Automation Engineer & Cybersecurity Enthusiast  
-Costa Rica
+python3 aws_securityhub_auditor.py
+
+Outputs:
+- Normalized Security Hub findings  
+- Timestamped CSV export  
+
+--------------------------------------------------------------------------------
+
+## 9. Output Format (SOC‑Style)
+
+Both scripts generate CSV files containing:
+
+- Timestamp  
+- IP address  
+- Attack type (if applicable)  
+- VirusTotal malicious/suspicious counts  
+- AbuseIPDB score and reports  
+- Shodan ports, CVEs, ISP, OS  
+- OTX pulses, tags, malware families  
+- GreyNoise classification, noise flag, actor  
+- Unified severity score  
+- Cloud findings (AWS Security Hub)  
+
+CSV files are compatible with:
+- Splunk  
+- Elastic  
+- Power BI  
+- Grafana  
+- Excel  
+- Custom SIEM ingestion pipelines  
+
+--------------------------------------------------------------------------------
+
+## 10. Author
+
+Danny — Security Engineer, Threat Intelligence & Cloud Security Automation
 
 
 
