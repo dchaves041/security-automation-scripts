@@ -1,0 +1,245 @@
+# /home/danny/Desktop/Security-Automation-Scripts/examples/playbook_service/app.py
+import json
+import time
+import uuid
+import logging
+from logging.handlers import RotatingFileHandler
+from typing import Optional, Dict, Any
+
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, IPvAnyAddress
+
+import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from integrations.observability import REQUEST_COUNTER, REQUEST_LATENCY, OUTBOUND_RETRIES, CB_STATE, log_info, log_warning, log_error
+from integrations.http_client import post_with_retry, set_async_client
+
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+
+from store_sqlite import init_db, get_ticket, save_ticket
+
+# -------------------------
+# App and basic setup
+# -------------------------
+app = FastAPI(title="Playbook Service", version="0.1")
+
+# Initialize DB
+init_db()
+
+# -------------------------
+# Logging (single configuration)
+# -------------------------
+logger = logging.getLogger("playbook")
+logger.setLevel(logging.INFO)
+# Stream handler
+stream_h = logging.StreamHandler()
+stream_h.setFormatter(logging.Formatter(
+    '%(asctime)s %(levelname)s %(name)s %(message)s'))
+logger.addHandler(stream_h)
+# Rotating file handler
+file_h = RotatingFileHandler(
+    "playbook_uvicorn.log", maxBytes=10_000_000, backupCount=3)
+file_h.setFormatter(logging.Formatter(
+    '%(asctime)s %(levelname)s %(name)s %(message)s'))
+logger.addHandler(file_h)
+
+# -------------------------
+# Prometheus metrics (single set)
+# -------------------------
+REQUEST_COUNTER = Counter("playbook_requests_total", "Total requests", [
+                          "path", "method", "status"])
+REQUEST_LATENCY = Histogram(
+    "playbook_request_latency_seconds", "Request latency seconds", ["path"])
+OUTBOUND_RETRIES = Counter(
+    "playbook_outbound_retries_total", "Outbound retries total", ["target"])
+
+# -------------------------
+# Global async httpx client
+# -------------------------
+async_client: Optional[httpx.AsyncClient] = None
+
+# -------------------------
+# Pydantic models
+# -------------------------
+
+
+class Alert(BaseModel):
+    id: Optional[str] = Field(None, description="Unique alert id from SIEM")
+    title: str
+    description: Optional[str] = None
+    user: Optional[str] = None
+    ip: Optional[IPvAnyAddress] = None
+    raw: Optional[Dict[str, Any]] = None
+
+# -------------------------
+# Lifespan events
+# -------------------------
+
+
+@app.on_event("startup")
+async def startup_event():
+    global async_client
+    async_client = httpx.AsyncClient(timeout=10.0)
+    logger.info(json.dumps({"level": "info", "event": "startup"}))
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global async_client
+    if async_client:
+        await async_client.aclose()
+        async_client = None
+    logger.info(json.dumps({"level": "info", "event": "shutdown"}))
+
+# -------------------------
+# Single middleware: request_id + logging + metrics
+# -------------------------
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    path = str(request.url.path)
+    start = time.time()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        latency = time.time() - start
+        REQUEST_COUNTER.labels(
+            path=path, method=request.method, status="500").inc()
+        REQUEST_LATENCY.labels(path=path).observe(latency)
+        logger.error(json.dumps({
+            "level": "error",
+            "request_id": request_id,
+            "path": path,
+            "error": str(exc),
+            "latency_ms": int(latency * 1000)
+        }))
+        return JSONResponse(status_code=500, content={"detail": "internal error", "request_id": request_id})
+    latency = time.time() - start
+    status_code = response.status_code
+    REQUEST_COUNTER.labels(path=path, method=request.method,
+                           status=str(status_code)).inc()
+    REQUEST_LATENCY.labels(path=path).observe(latency)
+    logger.info(json.dumps({
+        "level": "info",
+        "request_id": request_id,
+        "path": path,
+        "status_code": status_code,
+        "latency_ms": int(latency * 1000)
+    }))
+    response.headers["X-Request-Id"] = request_id
+    return response
+
+# -------------------------
+# Business logic
+# -------------------------
+
+
+def enrich_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
+    enriched = dict(alert)
+    enriched["enrichment"] = {
+        "ip_reputation": "malicious" if "suspicious" in alert.get("title", "").lower() else "unknown",
+        "user_last_login": "2026-05-01T12:00:00Z"
+    }
+    return enriched
+
+
+def create_ticket(enriched: Dict[str, Any]) -> Dict[str, Any]:
+    ticket = {
+        "ticket_id": f"TICKET-{int(time.time())}",
+        "summary": f"Auto ticket for {enriched.get('user', 'unknown')} - {enriched.get('title')}"
+    }
+    logger.info(json.dumps(
+        {"level": "info", "event": "ticket_created", "ticket": ticket}))
+    return ticket
+
+
+def get_or_create_ticket(alert_id: str, enriched: Dict[str, Any]) -> Dict[str, Any]:
+    existing = get_ticket(alert_id)
+    if existing:
+        logger.info(json.dumps(
+            {"level": "info", "event": "idempotency_hit", "alert_id": alert_id}))
+        return existing
+    ticket = create_ticket(enriched)
+    save_ticket(alert_id, ticket)
+    return ticket
+
+# -------------------------
+# Retries/backoff for outbound calls (tenacity)
+# -------------------------
+
+
+@retry(stop=stop_after_attempt(4),
+       wait=wait_exponential(multiplier=1, min=1, max=10),
+       retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)))
+async def post_with_retry(url: str, payload: Dict[str, Any], target_label: str = "external"):
+    global async_client
+    try:
+        if async_client:
+            resp = await async_client.post(url, json=payload)
+        else:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=payload)
+        resp.raise_for_status()
+        return resp.json() if resp.content else {}
+    except Exception as e:
+        # Count the failed attempt for metrics and re-raise so tenacity can retry
+        OUTBOUND_RETRIES.labels(target=target_label).inc()
+        logger.warning(json.dumps(
+            {"level": "warning", "event": "outbound_failed", "target": target_label, "error": str(e)}))
+        raise
+
+# -------------------------
+# Metrics endpoint
+# -------------------------
+
+
+@app.get("/metrics")
+async def metrics():
+    data = generate_latest()
+    return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+
+# -------------------------
+# Main ingest endpoint
+# -------------------------
+
+
+@app.post("/ingest")
+async def ingest(alert: Alert, request: Request):
+    alert_dict = alert.dict()
+    enriched = enrich_alert(alert_dict)
+
+    # Determinar alert_id de forma segura (para idempotencia)
+    alert_id = alert_dict.get("id") or alert_dict.get("title")
+
+    if enriched["enrichment"]["ip_reputation"] == "malicious":
+        result = {"action": "blocked_ip", "details": {
+            "ip": alert_dict.get("ip", "n/a")}}
+    else:
+        if not alert_id:
+            raise HTTPException(
+                status_code=400, detail="alert id or title required for idempotency")
+        ticket = get_or_create_ticket(alert_id, enriched)
+        result = {"action": "ticket_created", "ticket": ticket}
+
+    # Forzar retries hacia un destino que falla (solo para prueba)
+    if alert_id:
+        try:
+            await post_with_retry(
+                "http://127.0.0.1:59999/block",
+                {"alert_id": alert_id, "result": result},
+                target_label="test_unreachable"
+            )
+        except Exception as e:
+            logger.error(json.dumps({
+                "level": "error",
+                "event": "notify_failed",
+                "error": str(e),
+                "alert_id": alert_id,
+                "request_id": getattr(request.state, "request_id", "n/a")
+            }))
+
+    return {"status": "ok", "result": result}
