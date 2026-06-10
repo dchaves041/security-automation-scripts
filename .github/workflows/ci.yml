@@ -1,21 +1,45 @@
 name: CI
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+
 jobs:
   tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-      - run: |
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest httpx uvicorn -q
-      - working-directory: examples/playbook_service
+
+      - name: Import check (fail early with traceback)
+        working-directory: examples/playbook_service
         run: |
-          pytest -q tests/test_idempotency_and_cb.py
+          python - <<'PY'
+          import importlib, traceback
+          try:
+              importlib.import_module('app')
+              print('import ok')
+          except Exception:
+              traceback.print_exc()
+              raise SystemExit(2)
+          PY
+
+      - name: Run tests examples playbook_service
+        working-directory: examples/playbook_service
+        run: |
+          pytest -q
